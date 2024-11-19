@@ -1,23 +1,31 @@
 #pragma once
 
+#include <deque>
 #include <string>
+#include <typeinfo>
 
 #include "antlr/BlaiseBaseVisitor.h"
 #include "BlaiseClasses.h"
+#include "antlr/BlaiseParser.h"
 
 class InterpreterVisitor : public BlaiseBaseVisitor {
 public:
 
-    BlaiseBlock gl_block; // global block
+    InterpreterVisitor();
+
+    BlaiseBlock *gl_block; // global block
+    std::deque<BlaiseBlock> block_stack;
 
 private:  // ====================== METHODS ===========================
-    // static BLAISE_TYPE_ID StringToTypeId(const std::string& str);
-    // static std::string TypeIdToString(BLAISE_TYPE_ID type);
+    static const std::type_info& StringToTypeId(const std::string& str);
     static std::string StringToUpper(std::string str);
-    // static bool HasType(const std::any& value, BLAISE_TYPE_ID type);
-    // static BLAISE_TYPE_ID GetType(const std::any& value);
     static bool IsNumber(const std::any& value);
+
     static std::string AnyValueToString(const std::any& value);
+    std::pair<std::string *, BlaiseBlock *> FindIdAndBlock(const std::string& id);
+
+    BlaiseFunction& AddFunction(const std::string& name, const std::type_info& type,
+                                BlaiseParser::Param_listContext *paramlist);
 
 public:
     virtual std::any visitProgram(BlaiseParser::ProgramContext *context) override;
@@ -52,15 +60,9 @@ public:
 
     virtual std::any visitIfStmtBlock(BlaiseParser::IfStmtBlockContext *context) override;
 
-    virtual std::any visitIfStmtExpr(BlaiseParser::IfStmtExprContext *context) override;
-
     virtual std::any visitElseStmtBlock(BlaiseParser::ElseStmtBlockContext *context) override;
 
-    virtual std::any visitElseStmtExpr(BlaiseParser::ElseStmtExprContext *context) override;
-
-    virtual std::any visitElseIfStmtBlock(BlaiseParser::ElseIfStmtBlockContext *context) override;
-
-    virtual std::any visitElseIfStmtExpr(BlaiseParser::ElseIfStmtExprContext *context) override;
+    virtual std::any visitElseIfStmt(BlaiseParser::ElseIfStmtContext *context) override;
 
     virtual std::any visitLoopStmt(BlaiseParser::LoopStmtContext *context) override;
 

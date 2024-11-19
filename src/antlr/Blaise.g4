@@ -15,7 +15,7 @@ stmt    : function_def
         ;
 
 function_def    : FUNCTION IDENTIFIER '(' (param_list)? ')' RETURNS IDENTIFIER ';'          # FunctionDeclaration
-                | FUNCTION IDENTIFIER '(' (param_list)? ')' RETURNS IDENTIFIER block        # FunctionDefinition
+                | FUNCTION IDENTIFIER '(' (param_list)? ')' RETURNS IDENTIFIER stmt         # FunctionDefinition
                 ;
 
 function_call   : IDENTIFIER '(' (arg_list)? ')'                                            # FunctionCall
@@ -25,8 +25,8 @@ param_list      : IDENTIFIER IDENTIFIER ',' param_list                          
                 | IDENTIFIER IDENTIFIER                                                     # ParamListEnd
                 ;
 
-arg_list        : (IDENTIFIER | expr) ',' arg_list                                                   # ArgListComma
-                | (IDENTIFIER | expr)                                                                # ArgListEnd
+arg_list        : (IDENTIFIER | expr) ',' arg_list                                          # ArgListComma
+                | (IDENTIFIER | expr)                                                       # ArgListEnd
                 ;
 
 block           : 'begin' (stmt)* 'end'                                                     # CodeBlock
@@ -44,19 +44,14 @@ return_stmt     : 'return' (IDENTIFIER | expr)                                  
 writeln_stmt    : 'writeln' '(' expr ')'                                                    # WritelnStmt
                 ;
 
-if_stmt         : 'if' '(' expr ')' 'then' block (else_stmt | else_if_stmt)?                # IfStmtBlock
-                | 'if' '(' expr ')' 'then' expr (else_stmt | else_if_stmt | ';')            # IfStmtExpr
+if_stmt         : 'if' '(' expr ')' 'then' stmt (else_stmt)?                                # IfStmtBlock
                 ;
 
-else_stmt       : 'else' block                                                              # ElseStmtBlock
-                | 'else' expr ';'                                                           # ElseStmtExpr
+else_stmt       : 'else' stmt                                                               # ElseStmtBlock
+                | 'else' if_stmt                                                            # ElseIfStmt
                 ;
 
-else_if_stmt    : 'else' 'if' '(' expr ')' 'then' block (else_stmt)?                        # ElseIfStmtBlock
-                | 'else' 'if' '(' expr ')' 'then' expr (else_stmt | ';')                    # ElseIfStmtExpr
-                ;
-
-loop_stmt       : 'loop' 'if' '(' expr ')' (block | ';')                                    # LoopStmt
+loop_stmt       : 'loop' 'if' '(' expr ')' (stmt | ';')                                     # LoopStmt
                 ;
 
 assignment      : IDENTIFIER ASSIGN expr                                                    # AssignStmt

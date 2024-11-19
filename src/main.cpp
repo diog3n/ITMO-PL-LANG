@@ -4,7 +4,9 @@
 #include <antlr4-runtime.h>
 #include "antlr/BlaiseParser.h"
 #include "antlr/BlaiseLexer.h"
+
 #include "InterpreterVisitor.h"
+#include "BlaiseErrorListener.h"
 
 int main(int argc, const char** argv) {
 
@@ -22,12 +24,23 @@ int main(int argc, const char** argv) {
     // Create a token stream from the lexer
     antlr4::CommonTokenStream tokens(&lexer);
 
+    BlaiseErrorListener errlistener;
+
     // Create a parser from the token stream
     BlaiseParser parser(&tokens);
 
+    parser.removeErrorListeners();
+    parser.addErrorListener(&errlistener);
+
     BlaiseParser::ProgramContext* parse_result = parser.program();
 
-    std::cout << parse_result->toStringTree(true) << std::endl;
+    // std::cout << parse_result->toStringTree(true) << std::endl;
+
+    if (parser.getNumberOfSyntaxErrors()) {
+        std::cout << "Parsing failed with " << parser.getNumberOfSyntaxErrors()
+                  << " errors" << std::endl;
+        return 1;
+    }
 
     // Associate a visitor with the Suite context
     InterpreterVisitor visitor;

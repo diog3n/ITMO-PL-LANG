@@ -3,19 +3,21 @@
 #include <cctype>
 #include <sstream>
 #include <stdexcept>
+#include <string>
+#include <typeinfo>
+#include <utility>
 
 #include "InterpreterVisitor.h"
 #include "BlaiseClasses.h"
 #include "antlr/BlaiseParser.h"
-#include "tree/TerminalNode.h"
 
 #define DEBUG   1
 
 #define DEBUG__BEGIN \
-    if (DEBUG) std::cout << "In function " << __func__ << std::endl
+    if (DEBUG >= 2) std::cout << "In function " << __func__ << std::endl
 
-#define DEBUG__PRINT_VAL(__val) \
-    if (DEBUG) std::cout << #__val << " = " << __val << std::endl
+#define DEBUG__PRINT_VAL(__level, __val) \
+    if (DEBUG >= __level) std::cout << #__val << " = " << __val << std::endl
 
 #define ANY_RECAST(__type_from, __type_to, __val) \
     static_cast<__type_to>(std::any_cast<__type_from>(__val))
@@ -37,133 +39,117 @@
     (__val.type() == typeid(__type))
 
 // MACRO MAGIC FOR std::any
-#define $$any_case_block_begin(__any_val) \
+#define any_case_block_begin$$(__any_val) \
     { const std::any& __$$any_val_internal$$ = __any_val
 
-#define $$any_case_start(__type) \
+#define any_case_start$$(__type) \
     if (ANY_IS(__$$any_val_internal$$, __type)) {
 
-#define $$any_case(__type) } else $$any_case_start(__type)
+#define any_case$$(__type) } else any_case_start$$(__type)
 
-#define $$any_case_default \
+#define any_case_default$$ \
     } else {
 
-#define $$any_case_block_end }}
+#define any_case_block_end$$ }}
+
+#define SHOULD_NOT_BE_HERE std::string(__func__) + ": You should not be here"
+
+void recast_to_double(std::any& lhs, std::any& rhs) {
+    if (ANY_IS(lhs, int)) lhs = ANY_RECAST(int, double, lhs);
+    if (ANY_IS(rhs, int)) rhs = ANY_RECAST(int, double, rhs);
+}
+
+InterpreterVisitor::InterpreterVisitor() {
+    block_stack.emplace_back();
+    gl_block = &block_stack.back();
+}
 
 std::string InterpreterVisitor::StringToUpper(std::string str) {
     std::transform(str.begin(), str.end(), str.begin(), toupper);
     return str;
 }
 
+std::pair<std::string *, BlaiseBlock *>
+InterpreterVisitor::FindIdAndBlock(const std::string& str) {
+    BlaiseBlock *block = nullptr;
+    std::string *id = nullptr;
+
+
+    for (auto riter = block_stack.rbegin(); riter != block_stack.rend(); riter++) {
+        for (auto id_riter = riter->ids.rbegin(); id_riter != riter->ids.rend(); id_riter++) {
+            if (*id_riter == str) {
+                id = &(*id_riter);
+                block = &(*riter);
+
+                return std::make_pair<std::string *, BlaiseBlock *>(std::move(id), std::move(block));
+            }
+        }
+    }
+
+    throw std::invalid_argument("Variable " + str + " has not been defined!");
+}
+
 std::string InterpreterVisitor::AnyValueToString(const std::any& value) {
     std::ostringstream out;
 
-    $$any_case_block_begin(value);
+    any_case_block_begin$$(value);
 
-        $$any_case_start(double)
+        any_case_start$$(double)
             out << std::any_cast<double>(value);
 
-        $$any_case(std::string)
+        any_case$$(std::string)
             out << std::any_cast<std::string>(value);
 
-        $$any_case(int)
+        any_case$$(int)
             out << std::any_cast<int>(value);
 
-        $$any_case(bool)
+        any_case$$(bool)
             out << (std::any_cast<bool>(value) ? "true" : "false");
 
-        $$any_case(char)
+        any_case$$(char)
             out << std::any_cast<char>(value);
 
-        $$any_case_default
+        any_case_default$$
             out << "Something else";
 
-    $$any_case_block_end;
+    any_case_block_end$$;
 
     return out.str();
 }
 
+BlaiseFunction& InterpreterVisitor::AddFunction(const std::string& name, const std::type_info& type,
+                                                BlaiseParser::Param_listContext *paramlist) {
+    BlaiseFunction& func = block_stack.back().functions.emplace_back();
 
-// std::string InterpreterVisitor::TypeIdToString(BLAISE_TYPE_ID type) {
-//     switch(type) {
-//         case BLAISE_TYPE_ID::DOUBLE:
-//             return "double";
-//             break;
-//         case BLAISE_TYPE_ID::INTEGER:
-//             return "int";
-//             break;
-//         case BLAISE_TYPE_ID::CHAR:
-//             return "char";
-//             break;
-//         case BLAISE_TYPE_ID::STRING:
-//             return "string";
-//             break;
-//         case BLAISE_TYPE_ID::BOOLEAN:
-//             return "boolean";
-//             break;
-//         }
-// }
+    func.name = name;
+    func.ret_type = &type;
 
-BLAISE_TYPE_ID InterpreterVisitor::StringToTypeId(const std::string& str) {
-    if (str == "double")
-        return BLAISE_TYPE_ID::DOUBLE;
-    else if (str == "int")
-        return BLAISE_TYPE_ID::INTEGER;
-    else if (str == "char")
-        return BLAISE_TYPE_ID::CHAR;
-    else if (str == "string")
-        return BLAISE_TYPE_ID::STRING;
-    else if (str == "boolean")
-        return BLAISE_TYPE_ID::BOOLEAN;
+    if (paramlist)
+        func.args = std::move(std::any_cast<ArgsMap>(visit(paramlist)));
 
-    throw std::invalid_argument("Unknown type: " + str);
+    block_stack.back().ids_to_functions[func.name] = &func;
+
+    return func;
 }
 
-BLAISE_TYPE_ID InterpreterVisitor::GetType(const std::any& value) {
-    if (value.type() == typeid(double)) {
-        return BLAISE_TYPE_ID::DOUBLE;
-    } else if (value.type() == typeid(int)) {
-        return BLAISE_TYPE_ID::INTEGER;
-    } else if (value.type() == typeid(char)) {
-        return BLAISE_TYPE_ID::CHAR;
-    } else if (value.type() == typeid(std::string)) {
-        return BLAISE_TYPE_ID::STRING;
-    } else if (value.type() == typeid(bool)) {
-        return BLAISE_TYPE_ID::BOOLEAN;
+const std::type_info& InterpreterVisitor::StringToTypeId(const std::string& str) {
+    if (str == "double") {
+        return typeid(double);
+    } else if (str == "int") {
+        return typeid(int);
+    } else if (str == "string") {
+        return typeid(std::string);
+    } else if (str == "boolean") {
+        return typeid(bool);
+    } else if (str == "char") {
+        return typeid(char);
     }
 
-    throw std::invalid_argument("std::any has no value.");
-}
-
-bool InterpreterVisitor::HasType(const std::any& value, BLAISE_TYPE_ID type) {
-    try {
-        switch(type) {
-            case BLAISE_TYPE_ID::DOUBLE:
-                std::any_cast<double>(value);
-                break;
-            case BLAISE_TYPE_ID::INTEGER:
-                std::any_cast<int>(value);
-                break;
-            case BLAISE_TYPE_ID::CHAR:
-                std::any_cast<char>(value);
-                break;
-            case BLAISE_TYPE_ID::STRING:
-                std::any_cast<std::string>(value);
-                break;
-            case BLAISE_TYPE_ID::BOOLEAN:
-                std::any_cast<bool>(value);
-                break;
-        }
-    } catch (const std::bad_any_cast&) {
-        return false;
-    }
-
-    return true;
+    throw std::invalid_argument("Invalid type identifier: " + str);
 }
 
 bool InterpreterVisitor::IsNumber(const std::any& value) {
-    return (GetType(value) == BLAISE_TYPE_ID::DOUBLE) ||
-           (GetType(value) == BLAISE_TYPE_ID::INTEGER);
+    return (ANY_IS(value, double) || ANY_IS(value, int));
 }
 
 std::any InterpreterVisitor::visitProgram(BlaiseParser::ProgramContext *context) {
@@ -171,10 +157,10 @@ std::any InterpreterVisitor::visitProgram(BlaiseParser::ProgramContext *context)
 
     // Stack contents
     if (DEBUG) {
-        for (const auto& pair : gl_block.ids_to_types) {
-            BLAISE_TYPE_ID type = pair.second;
-            const std::string *name = pair.first;
-            std::cout << TypeIdToString(type) << " " << *name << " = "  << AnyValueToString(gl_block.ids_to_values[name]) << std::endl;
+        for (const auto& pair : gl_block->ids_to_types) {
+            const std::type_info& type = *pair.second;
+            const std::string_view name = pair.first;
+            std::cout << type.name() << " " << name << " = "  << AnyValueToString(gl_block->ids_to_values[name]) << std::endl;
         }
     }
 
@@ -186,10 +172,22 @@ std::any InterpreterVisitor::visitStmt(BlaiseParser::StmtContext *context) {
 }
 
 std::any InterpreterVisitor::visitFunctionDeclaration(BlaiseParser::FunctionDeclarationContext *context) {
+    const std::string& id = context->IDENTIFIER(0)->toString();
+    const std::type_info& type = StringToTypeId(context->IDENTIFIER(1)->toString());
+
+    AddFunction(id, type, context->param_list());
     return 0;
 }
 
 std::any InterpreterVisitor::visitFunctionDefinition(BlaiseParser::FunctionDefinitionContext *context) {
+    const std::string& id = context->IDENTIFIER(0)->toString();
+    const std::type_info& type = StringToTypeId(context->IDENTIFIER(1)->toString());
+
+    auto iter = std::find_if(block_stack.back().functions.begin(), block_stack.back().functions.end(), [&id](const BlaiseFunction& func) { return func.name == id; });
+    if (iter != block_stack.back().functions.end()) {
+        AddFunction(id, type, context->param_list());
+    }
+
     return 0;
 }
 
@@ -198,11 +196,28 @@ std::any InterpreterVisitor::visitFunctionCall(BlaiseParser::FunctionCallContext
 }
 
 std::any InterpreterVisitor::visitParamListComma(BlaiseParser::ParamListCommaContext *context) {
-    return 0;
+    const std::type_info& type = StringToTypeId(context->IDENTIFIER(0)->toString());
+    const std::string& id = context->IDENTIFIER(1)->toString();
+    auto args = std::any_cast<ArgsMap>(visit(context->param_list()));
+
+    if (args.find(id) != args.end()) {
+        throw std::invalid_argument("Identifier " + id + " already is in the list.");
+    }
+
+    args[id] = &type;
+
+    return args;
 }
 
 std::any InterpreterVisitor::visitParamListEnd(BlaiseParser::ParamListEndContext *context) {
-    return 0;
+    ArgsMap args;
+
+    const std::string& id = context->IDENTIFIER(1)->toString();
+    const std::type_info& type = StringToTypeId(context->IDENTIFIER(0)->toString());
+
+    args[id] = &type;
+
+    return args;
 }
 
 std::any InterpreterVisitor::visitArgListComma(BlaiseParser::ArgListCommaContext *context) {
@@ -214,7 +229,12 @@ std::any InterpreterVisitor::visitArgListEnd(BlaiseParser::ArgListEndContext *co
 }
 
 std::any InterpreterVisitor::visitCodeBlock(BlaiseParser::CodeBlockContext *context) {
-    return visitChildren(context);
+    block_stack.emplace_back();
+
+    std::any value = visitChildren(context);
+
+    block_stack.pop_back();
+    return value;
 }
 
 std::any InterpreterVisitor::visitVariableDefinition(BlaiseParser::VariableDefinitionContext *context) {
@@ -222,28 +242,30 @@ std::any InterpreterVisitor::visitVariableDefinition(BlaiseParser::VariableDefin
 
     std::string type_id = context->IDENTIFIER(0)->toString();
     std::string var_id  = context->IDENTIFIER(1)->toString();
-    std::cout << "encountered " << type_id << " " << var_id << std::endl;
 
     std::any value = visit(context->initialization());
 
-    gl_block.ids.emplace_back(std::move(var_id));
-    gl_block.ids_to_types[&gl_block.ids.back()] = StringToTypeId(type_id);
+    // If block stack is not empty, then create a variable in the narrowest scope
+    BlaiseBlock *blockptr = &block_stack.back();
 
-    BLAISE_TYPE_ID var_type = gl_block.ids_to_types.at(&gl_block.ids.back());
+    blockptr->ids.emplace_back(std::move(var_id));
+    blockptr->ids_to_types[blockptr->ids.back()] = &StringToTypeId(type_id);
 
-    if (value.has_value() && GetType(value) != var_type) {
+    const std::type_info& var_type = *blockptr->ids_to_types.at(blockptr->ids.back());
+
+    if (value.has_value() && value.type() != var_type) {
 
         // Re-casting values from int to double and from double to int if needed
-        if (GetType(value) == BLAISE_TYPE_ID::DOUBLE && var_type == BLAISE_TYPE_ID::INTEGER) {
+        if (ANY_IS(value, double) && var_type == typeid(int)) {
             value = ANY_RECAST(double, int, value);
-        } else if (GetType(value) == BLAISE_TYPE_ID::INTEGER && var_type == BLAISE_TYPE_ID::DOUBLE) {
+        } else if (ANY_IS(value, int) && var_type == typeid(double)) {
             value = ANY_RECAST(int, double, value);
         } else {
             throw std::invalid_argument("Invalid value for variable of type " + type_id);
         }
     }
 
-    gl_block.ids_to_values[&gl_block.ids.back()] = value;
+    blockptr->ids_to_values[blockptr->ids.back()] = value;
 
     return value;
 }
@@ -255,54 +277,35 @@ std::any InterpreterVisitor::visitVariableInitialization(BlaiseParser::VariableI
 
 std::any InterpreterVisitor::visitAssignStmt(BlaiseParser::AssignStmtContext *context) {
     DEBUG__BEGIN;
-    auto id_iter = std::find(gl_block.ids.begin(), gl_block.ids.end(), context->IDENTIFIER()->toString());
-    if (id_iter == gl_block.ids.end()) throw std::invalid_argument("Variable has not been initialized");
-
-    const std::string& id = *id_iter;
+    auto [idptr, blockptr] = FindIdAndBlock(context->IDENTIFIER()->toString());
 
     std::any value = visit(context->expr());
 
-    if (gl_block.ids_to_types.at(&id) == BLAISE_TYPE_ID::DOUBLE) {
-        if (GetType(value) == BLAISE_TYPE_ID::INTEGER) value = ANY_RECAST(int, double, value);
-    } else if (gl_block.ids_to_types.at(&id) == BLAISE_TYPE_ID::INTEGER) {
-        if (GetType(value) == BLAISE_TYPE_ID::DOUBLE) value = ANY_RECAST(double, int, value);
+    if (*blockptr->ids_to_types.at(*idptr) == typeid(double)) {
+        if (ANY_IS(value, int))
+            value = ANY_RECAST(int, double, value);
+    } else if (*blockptr->ids_to_types.at(*idptr) == typeid(int)) {
+        if (ANY_IS(value, double))
+            value = ANY_RECAST(double, int, value);
     }
 
-    if (GetType(value) != gl_block.ids_to_types.at(&id))
-        throw std::invalid_argument("Invalid value for type " + TypeIdToString(gl_block.ids_to_types.at(&id)));
+    if (value.type() != *blockptr->ids_to_types.at(*idptr))
+        throw std::invalid_argument("Invalid value for type " + std::string(blockptr->ids_to_types.at(*idptr)->name()));
 
-    gl_block.ids_to_values[&id] = value;
+    blockptr->ids_to_values[*idptr] = value;
 
     return BLAISE_STATUS::OK;
 }
 
 std::any InterpreterVisitor::visitWritelnStmt(BlaiseParser::WritelnStmtContext *context) {
     DEBUG__BEGIN;
-    std::any value = context->expr();
-    std::cout << "1" << std::endl;
-    DEBUG__PRINT_VAL(AnyValueToString(value));
+    std::string value = AnyValueToString(visit(context->expr()));
 
-    if (typeid(value) == typeid(bool))
+    std::cout << (DEBUG ? "writeln: " : "") << value << std::endl;
 
-    switch (GetType(value)) {
-        case BLAISE_TYPE_ID::BOOLEAN:
-            std::cout << "writeln: " << (std::any_cast<bool>(value) ? "true" : "false") << std::endl;
-            break;
-        case BLAISE_TYPE_ID::CHAR:
-            std::cout << "writeln: " << std::any_cast<char>(value) << std::endl;
-            break;
-        case BLAISE_TYPE_ID::DOUBLE:
-            std::cout << "writeln: " << std::any_cast<double>(value) << std::endl;
-            break;
-        case BLAISE_TYPE_ID::INTEGER:
-            std::cout << "writeln: " << std::any_cast<int>(value) << std::endl;
-            break;
-        case BLAISE_TYPE_ID::STRING:
-            std::cout << "writeln: " << std::any_cast<std::string>(value) << std::endl;
-            break;
-    }
+    return value;
 
-    return BLAISE_STATUS::OK;
+    throw std::invalid_argument(SHOULD_NOT_BE_HERE);
 }
 
 std::any InterpreterVisitor::visitReturnStmt(BlaiseParser::ReturnStmtContext *context) {
@@ -310,32 +313,57 @@ std::any InterpreterVisitor::visitReturnStmt(BlaiseParser::ReturnStmtContext *co
 }
 
 std::any InterpreterVisitor::visitIfStmtBlock(BlaiseParser::IfStmtBlockContext *context) {
-    return visitChildren(context);
-}
+    std::any condition_expr = visit(context->expr());
+    bool condition = false;
 
-std::any InterpreterVisitor::visitIfStmtExpr(BlaiseParser::IfStmtExprContext *context) {
-    return visitChildren(context);
+    if (ANY_IS(condition_expr, bool))
+        condition = std::any_cast<bool>(condition_expr);
+    else
+        throw std::invalid_argument("If statement expression must be boolean!");
+
+    if (condition) {
+        block_stack.emplace_back();
+        std::any value = visit(context->stmt());
+        block_stack.pop_back();
+        return value;
+    }
+
+    if (context->else_stmt())
+        return visit(context->else_stmt());
+
+    return false;
 }
 
 std::any InterpreterVisitor::visitElseStmtBlock(BlaiseParser::ElseStmtBlockContext *context) {
-
-    return visitChildren(context);
+    block_stack.emplace_back();
+    std::any value = visitChildren(context);
+    block_stack.pop_back();
+    return value;
 }
 
-std::any InterpreterVisitor::visitElseStmtExpr(BlaiseParser::ElseStmtExprContext *context) {
-    return visitChildren(context);
-}
-
-std::any InterpreterVisitor::visitElseIfStmtBlock(BlaiseParser::ElseIfStmtBlockContext *context) {
-    return visitChildren(context);
-}
-
-std::any InterpreterVisitor::visitElseIfStmtExpr(BlaiseParser::ElseIfStmtExprContext *context) {
+std::any InterpreterVisitor::visitElseIfStmt(BlaiseParser::ElseIfStmtContext *context) {
     return visitChildren(context);
 }
 
 std::any InterpreterVisitor::visitLoopStmt(BlaiseParser::LoopStmtContext *context) {
-    return visitChildren(context);
+    std::any condition_expr;
+    bool condition;
+
+    while (true) {
+        condition_expr = visit(context->expr());
+
+        if (ANY_IS(condition_expr, bool))
+            condition = std::any_cast<bool>(condition_expr);
+        else
+            throw std::invalid_argument("Loop if statement expression must be boolean!");
+
+        if (!condition) break;
+
+        if (context->stmt())
+            visit(context->stmt());
+    }
+
+    return condition;
 }
 
 std::any InterpreterVisitor::visitExprOperation(BlaiseParser::ExprOperationContext *context) {
@@ -345,64 +373,79 @@ std::any InterpreterVisitor::visitExprOperation(BlaiseParser::ExprOperationConte
     BLAISE_OP_ID operator_ = std::any_cast<BLAISE_OP_ID>(visit(context->operator_()));
     std::any expr = visit(context->expr());
 
-    if (GetType(operand) != GetType(expr)) {
-        if (!(IsNumber(operand) && IsNumber(expr)))
-            throw std::invalid_argument("Cannot perform an operation between different types");
+    if (operand.type() != expr.type()) {
 
-        if (GetType(operand) != BLAISE_TYPE_ID::DOUBLE) {
+        // If they are both numbers (int and double) - then it's okay
+        // If one of them is a string - then it's also okay, we implicitly cast
+        // both values to string.
+        if (!(IsNumber(operand) && IsNumber(expr)) &&
+            !(ANY_IS(operand, std::string) || ANY_IS(expr, std::string))) {
+
+            throw std::invalid_argument("Cannot perform an operation between different types");
+        }
+
+        if (ANY_IS(operand, int)) {
             operand = ANY_RECAST(int, double, operand);
         }
 
-        if (GetType(expr) != BLAISE_TYPE_ID::DOUBLE) {
+        if (ANY_IS(expr, int)) {
             expr = ANY_RECAST(int, double, expr);
+        }
+
+        if (ANY_IS(operand, std::string)) {
+            expr = AnyValueToString(expr);
+        }
+
+        if (ANY_IS(expr, std::string)) {
+            operand = AnyValueToString(operand);
         }
     }
 
     switch (operator_) {
         case BLAISE_OP_ID::PLUS:
-            std::cout << "PLUS" << std::endl;
+            if (DEBUG > 2) std::cout << "PLUS" << std::endl;
             OPERATION_BLOCK(operand, expr, +, int);
             OPERATION_BLOCK(operand, expr, +, bool);
             OPERATION_BLOCK(operand, expr, +, double);
             OPERATION_BLOCK(operand, expr, +, std::string);
             break;
         case BLAISE_OP_ID::MINUS:
-            std::cout << "MINUS" << std::endl;
+            if (DEBUG > 2) std::cout << "MINUS" << std::endl;
             OPERATION_BLOCK(operand, expr, -, int);
             OPERATION_BLOCK(operand, expr, -, double);
             break;
         case BLAISE_OP_ID::MUL:
-            std::cout << "MUL" << std::endl;
+            if (DEBUG > 2) std::cout << "MUL" << std::endl;
             OPERATION_BLOCK(operand, expr, *, int);
             OPERATION_BLOCK(operand, expr, *, double);
             break;
         case BLAISE_OP_ID::DIV:
-            std::cout << "DIV" << std::endl;
+            if (DEBUG > 2) std::cout << "DIV" << std::endl;
             OPERATION_BLOCK(operand, expr, /, int);
             OPERATION_BLOCK(operand, expr, /, double);
             break;
         case BLAISE_OP_ID::EQUAL:
-            std::cout << "EQUAL" << std::endl;
+            if (DEBUG > 2) std::cout << "EQUAL" << std::endl;
             OPERATION_BLOCK_ALL_TYPES(operand, expr, ==);
             break;
         case BLAISE_OP_ID::NEQUAL:
-            std::cout << "NEQUAL" << std::endl;
+            if (DEBUG > 2) std::cout << "NEQUAL" << std::endl;
             OPERATION_BLOCK_ALL_TYPES(operand, expr, !=);
             break;
         case BLAISE_OP_ID::LESS:
-            std::cout << "LESS" << std::endl;
+            if (DEBUG > 2) std::cout << "LESS" << std::endl;
             OPERATION_BLOCK_ALL_TYPES(operand, expr, <);
             break;
         case BLAISE_OP_ID::LEQUAL:
-            std::cout << "LEQUAL" << std::endl;
+            if (DEBUG > 2) std::cout << "LEQUAL" << std::endl;
             OPERATION_BLOCK_ALL_TYPES(operand, expr, <=);
             break;
         case BLAISE_OP_ID::GREATER:
-            std::cout << "GREATER" << std::endl;
+            if (DEBUG > 2) std::cout << "GREATER" << std::endl;
             OPERATION_BLOCK_ALL_TYPES(operand, expr, >);
             break;
         case BLAISE_OP_ID::GEQUAL:
-            std::cout << "GEQUAL" << std::endl;
+            if (DEBUG > 2) std::cout << "GEQUAL" << std::endl;
             OPERATION_BLOCK_ALL_TYPES(operand, expr, >=);
             break;
     }
@@ -413,13 +456,33 @@ std::any InterpreterVisitor::visitExprOperation(BlaiseParser::ExprOperationConte
 std::any InterpreterVisitor::visitExprUnaryMinusOperation(BlaiseParser::ExprUnaryMinusOperationContext *context) {
     DEBUG__BEGIN;
     std::any operand = visit(context->operand());
-    return visitChildren(context);
+    if (!IsNumber(operand))
+        throw std::invalid_argument("Invalid operand for an unary minus operation.");
+
+    any_case_block_begin$$(operand);
+        any_case_start$$(double)
+            return -(std::any_cast<double>(operand));
+        any_case$$(int)
+            return -(std::any_cast<int>(operand));
+    any_case_block_end$$;
+
+    throw std::invalid_argument(SHOULD_NOT_BE_HERE);
 }
 
 std::any InterpreterVisitor::visitExprUnaryPlusOperation(BlaiseParser::ExprUnaryPlusOperationContext *context) {
     DEBUG__BEGIN;
     std::any operand = visit(context->operand());
-    return visitChildren(context);
+    if (!IsNumber(operand))
+        throw std::invalid_argument("Invalid operand for an unary plus operation.");
+
+    any_case_block_begin$$(operand);
+        any_case_start$$(double)
+            return +(std::any_cast<double>(operand));
+        any_case$$(int)
+            return +(std::any_cast<int>(operand));
+    any_case_block_end$$;
+
+    throw std::invalid_argument(SHOULD_NOT_BE_HERE);
 }
 
 std::any InterpreterVisitor::visitExprOperand(BlaiseParser::ExprOperandContext *context) {
@@ -427,21 +490,19 @@ std::any InterpreterVisitor::visitExprOperand(BlaiseParser::ExprOperandContext *
     return visitChildren(context);
 }
 
+
 std::any InterpreterVisitor::visitOperandId(BlaiseParser::OperandIdContext *context) {
-    auto id_iter = std::find(gl_block.ids.begin(), gl_block.ids.end(), context->IDENTIFIER()->toString());
+    const std::string& str = context->IDENTIFIER()->toString();
+    const auto& [idptr, blockptr] = FindIdAndBlock(str);
 
-    // if present in the global scope
-    if (id_iter == gl_block.ids.end())
-        throw std::invalid_argument("Variable " + context->IDENTIFIER()->toString()
-                                                + " has not been defined!");
 
-    const std::string& id = *id_iter;
+    if (!idptr && !blockptr)
+        throw std::invalid_argument("Variable " + str + " has not been defined!");
 
-    // If it has not been initialized
-    if (!gl_block.ids_to_values.at(&id).has_value())
-        throw std::invalid_argument("Variable " + id + " has not been initialized!");
+    if (!blockptr->ids_to_values.at(*idptr).has_value())
+        throw std::invalid_argument("Variable " + *idptr + " has not been initialized!");
 
-    return gl_block.ids_to_values[&id];
+    return blockptr->ids_to_values.at(*idptr);
 }
 
 std::any InterpreterVisitor::visitOperandInt(BlaiseParser::OperandIntContext *context) {
