@@ -125,7 +125,7 @@ BlaiseFunction& InterpreterVisitor::AddFunction(const std::string& name, const s
     func.ret_type = &type;
 
     if (paramlist)
-        func.args = std::move(std::any_cast<ArgsMap>(visit(paramlist)));
+        func.args = std::move(std::any_cast<ArgsList>(visit(paramlist)));
 
     block_stack.back().ids_to_functions[func.name] = &func;
 
@@ -160,7 +160,13 @@ std::any InterpreterVisitor::visitProgram(BlaiseParser::ProgramContext *context)
         for (const auto& pair : gl_block->ids_to_types) {
             const std::type_info& type = *pair.second;
             const std::string_view name = pair.first;
-            std::cout << type.name() << " " << name << " = "  << AnyValueToString(gl_block->ids_to_values[name]) << std::endl;
+            std::cout << type.name() << " " << name << " = "
+                      << AnyValueToString(gl_block->ids_to_values[name])
+                      << std::endl;
+        }
+
+        for (const auto& func : gl_block->functions) {
+            std::cout << func.name << ": " << func.ret_type->name() << std::endl;
         }
     }
 
@@ -184,8 +190,14 @@ std::any InterpreterVisitor::visitFunctionDefinition(BlaiseParser::FunctionDefin
     const std::type_info& type = StringToTypeId(context->IDENTIFIER(1)->toString());
 
     auto iter = std::find_if(block_stack.back().functions.begin(), block_stack.back().functions.end(), [&id](const BlaiseFunction& func) { return func.name == id; });
-    if (iter != block_stack.back().functions.end()) {
+    if (iter == block_stack.back().functions.end()) {
         AddFunction(id, type, context->param_list());
+    }
+
+    if (!block_stack.back().ids_to_functions[id]->block) {
+        block_stack.back().ids_to_functions[id]->block = context->stmt();
+    } else {
+        throw std::invalid_argument("Function redefinition is not allowed.");
     }
 
     return 0;
@@ -198,24 +210,31 @@ std::any InterpreterVisitor::visitFunctionCall(BlaiseParser::FunctionCallContext
 std::any InterpreterVisitor::visitParamListComma(BlaiseParser::ParamListCommaContext *context) {
     const std::type_info& type = StringToTypeId(context->IDENTIFIER(0)->toString());
     const std::string& id = context->IDENTIFIER(1)->toString();
-    auto args = std::any_cast<ArgsMap>(visit(context->param_list()));
+    auto args = std::any_cast<ArgsList>(visit(context->param_list()));
+    auto iter = std::find(args.begin(), args.end(), id);
 
-    if (args.find(id) != args.end()) {
+    if ( iter != args.end()) {
         throw std::invalid_argument("Identifier " + id + " already is in the list.");
     }
 
-    args[id] = &type;
+
+    BlaiseVariable& var = args.emplace_front();
+
+    var.name = id;
+    var.type = &type;
 
     return args;
 }
 
 std::any InterpreterVisitor::visitParamListEnd(BlaiseParser::ParamListEndContext *context) {
-    ArgsMap args;
-
     const std::string& id = context->IDENTIFIER(1)->toString();
     const std::type_info& type = StringToTypeId(context->IDENTIFIER(0)->toString());
 
-    args[id] = &type;
+    ArgsList args;
+    BlaiseVariable& var = args.emplace_front();
+
+    var.name = id;
+    var.type = &type;
 
     return args;
 }

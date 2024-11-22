@@ -27,7 +27,6 @@ enum class BLAISE_OP_ID {
     GEQUAL,
 };
 
-using ArgsMap = std::map<std::string, const std::type_info *>;
 
 enum class BLAISE_STATUS {
     OK,
@@ -39,17 +38,43 @@ public:
     std::string name;
     const std::type_info *type;
     std::any value;
-    bool is_const = false;
+
+    BlaiseVariable(): type(nullptr) {};
+    BlaiseVariable(std::any value, const std::type_info& type): value(value), type(&type) {}
+    BlaiseVariable& operator=(const BlaiseVariable& var);
+
+    bool operator==(const std::string& str) const;
+    BlaiseVariable operator+(const BlaiseVariable& var) const;
+    BlaiseVariable operator-(const BlaiseVariable& var) const;
+    BlaiseVariable operator*(const BlaiseVariable& var) const;
+    BlaiseVariable operator/(const BlaiseVariable& var) const;
+    BlaiseVariable operator==(const BlaiseVariable& var) const;
+    BlaiseVariable operator!=(const BlaiseVariable& var) const;
+    BlaiseVariable operator<(const BlaiseVariable& var) const;
+    BlaiseVariable operator<=(const BlaiseVariable& var) const;
+    BlaiseVariable operator>(const BlaiseVariable& var) const;
+    BlaiseVariable operator>=(const BlaiseVariable& var) const;
+
+    BlaiseVariable operator+() const;
+    BlaiseVariable operator-() const;
+private:
+    static std::string AnyValueToString(const std::any& any);
+    static std::pair<BlaiseVariable, BlaiseVariable> CastToOneType(const BlaiseVariable& lhs,
+                                                                   const BlaiseVariable& rhs);
 };
+
+using ArgsList = std::list<BlaiseVariable>;
 
 class BlaiseFunction {
 public:
     std::string name;
     const std::type_info *ret_type;
-    ArgsMap args;
-    BlaiseParser::BlockContext *block = nullptr;
+    ArgsList args;
+    BlaiseParser::StmtContext *block = nullptr;
 
-    std::any Call(const std::vector<std::any>& args) const;
+    std::any Call(const ArgsList& args) const;
+
+    bool operator==(const std::string& str) const;
 };
 
 class BlaiseBlock {
