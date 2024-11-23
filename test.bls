@@ -1,8 +1,8 @@
-int a = -2;
-int b = 3;
-double c = 4;
+a = -2;
+b = 3;
+c = 4;
 
-function func1(int a, double b) returns double
+function func1(a, b)
 begin
     a = 5;
     b = 3;
@@ -10,24 +10,24 @@ begin
     return a / b;
 end
 
-function func2(int a, double b) returns nothing
+function func2(a, b)
 begin
     writeln("a = " + a);
     writeln("b = " + b);
 end
 
-function func3() returns nothing writeln("nothing");
+function func3() writeln("nothing");
 
-function func4() returns boolean return true;
+function func4() return true;
 
-boolean boo = c == 4;
+boo = c == 4;
 
 writeln("boo = " + boo);
 writeln("a = " + a);
 if (c >= 4) then
 begin
     writeln("inside of the if block!");
-    double d = c;
+    d = c;
 
     writeln("d = " + d);
 end
@@ -44,7 +44,7 @@ if (c < 2) then writeln("inside if expression!");
 else if (a < 0) then writeln("inside else if expression");
 else writeln("inside else expression!");
 
-int i = 0;
+i = 0;
 
 loop if (i < 10) begin
     writeln("i = " + i);

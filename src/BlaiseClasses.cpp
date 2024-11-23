@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "BlaiseClasses.h"
+#include "Util.h"
 
 #define ANY_RECAST(__type_from, __type_to, __val) \
     static_cast<__type_to>(std::any_cast<__type_from>(__val))
@@ -11,10 +12,10 @@
 #define CAST(__type, __val) std::any_cast<__type>(__val)
 
 #define OPERATION_BLOCK(__operand1, __operand2, __operation, __type)                \
-    if (*__operand1.type_ == typeid(__type)) {                                       \
+    if (__operand1.value_.type() == typeid(__type)) {                                       \
         __type tmp$$var = CAST(__type, __operand1.value_)                            \
                         __operation CAST(__type, __operand2.value_);                 \
-        return BlaiseVariable(typeid(__type), tmp$$var); }
+        return BlaiseVariable(std::string(), tmp$$var); }
 
 #define OPERATION_BLOCK_ALL_TYPES(__operand1, __operand2, __operation)               \
     OPERATION_BLOCK(__operand1, __operand2, __operation, double);                    \
@@ -24,9 +25,9 @@
     OPERATION_BLOCK(__operand1, __operand2, __operation, std::string)
 
 #define BOOLEAN_LOGIC_BLOCK(__operand1, __operand2, __operation, __type) \
-    if (*__operand1.type_ == typeid(__type)) { \
+    if (__operand1.value_.type() == typeid(__type)) { \
         bool tmp$$var = (CAST(__type, __operand1.value_) __operation CAST(__type, __operand2.value_)); \
-        return BlaiseVariable(typeid(bool), tmp$$var); \
+        return BlaiseVariable(tmp$$var); \
     }
 
 #define ANY_IS(__val, __type) \
@@ -99,27 +100,21 @@ const std::string& BlaiseVariable::Name() const {
 }
 
 const std::type_info& BlaiseVariable::Type() const {
-    return *type_;
+    return value_.type();
 }
 
 const std::any& BlaiseVariable::Value() const {
     return value_;
 }
 
-void BlaiseVariable::SetName(const std::string& name) {
+BlaiseVariable& BlaiseVariable::SetName(const std::string& name) {
     name_ = name;
+    return *this;
 }
 
-void BlaiseVariable::SetType(const std::type_info& type) {
-    type_ = &type;
-}
-
-void BlaiseVariable::SetValue(const std::any& value) {
-    BlaiseVariable var;
-    var.type_ = &value.type();
-    var.value_ = value;
-
-    *this = var;
+BlaiseVariable& BlaiseVariable::SetValue(const std::any& value) {
+    Assign({value});
+    return *this;
 }
 
 std::pair<BlaiseVariable, BlaiseVariable>
@@ -129,60 +124,47 @@ BlaiseVariable::CastToOneType(const BlaiseVariable& lhs, const BlaiseVariable& r
     if (!rhs.value_.has_value())
         throw std::invalid_argument(NO_VALUE_MESSAGE(rhs.name_));
 
-    if (*lhs.type_ != lhs.value_.type())
-        throw std::invalid_argument(InternalTypeAndValueTypeDifferMsg(lhs));
-    if (*rhs.type_ != rhs.value_.type())
-        throw std::invalid_argument(InternalTypeAndValueTypeDifferMsg(rhs));
-
-    if (*lhs.type_ == *rhs.type_)
+    if (lhs.value_.type() == rhs.value_.type())
         return std::make_pair(lhs, rhs);
 
     // Conversion rules
 
-    if (*lhs.type_ == typeid(double)) {
-        if (*rhs.type_ == typeid(int)) {
+    if (lhs.value_.type() == typeid(double)) {
+        if (rhs.value_.type() == typeid(int)) {
             BlaiseVariable var1;
             BlaiseVariable var2;
 
             var1.value_ = lhs.value_;
             var2.value_ = ANY_RECAST(int, double, rhs.value_);
 
-            var1.type_ = &typeid(double);
-            var2.type_ = &typeid(double);
-
-            return { var1, var2 };
+            return { std::move(var1), std::move(var2) };
         }
-    } else if (*lhs.type_ == typeid(int)) {
-        if (*rhs.type_ == typeid(double)) {
+    } else if (lhs.value_.type() == typeid(int)) {
+        if (rhs.value_.type() == typeid(double)) {
             BlaiseVariable var1;
             BlaiseVariable var2;
 
             var1.value_ = ANY_RECAST(int, double, lhs.value_);
             var2.value_ = rhs.value_;
 
-            var1.type_ = &typeid(double);
-            var2.type_ = &typeid(double);
-
-            return { var1, var2 };
+            return { std::move(var1), std::move(var2) };
         }
-    } else if (*lhs.type_ == typeid(char)) {
+    } else if (lhs.value_.type() == typeid(char)) {
         // Can be added if needed
-    } else if (*lhs.type_ == typeid(bool)) {
+    } else if (lhs.value_.type() == typeid(bool)) {
         // can be added if needed
-    } else if (*lhs.type_ == typeid(std::string) || *rhs.type_ == typeid(std::string)) {
+    } else if (lhs.value_.type() == typeid(std::string) || rhs.value_.type() == typeid(std::string)) {
         BlaiseVariable var1;
         BlaiseVariable var2;
 
         var1.value_ = AnyValueToString(lhs.value_);
         var2.value_ = AnyValueToString(rhs.value_);
 
-        var1.type_ = &typeid(std::string);
-        var2.type_ = &typeid(std::string);
-
-        return { var1, var2 };
+        return { std::move(var1), std::move(var2) };
     }
 
-    throw std::invalid_argument(NO_VIABLE_CONVERSION(lhs.type_->name(), rhs.type_->name()));
+    throw std::invalid_argument(NO_VIABLE_CONVERSION(lhs.value_.type().name(),
+                                                     rhs.value_.type().name()));
 }
 
 bool BlaiseVariable::operator==(const std::string& str) const {
@@ -193,22 +175,8 @@ BlaiseVariable& BlaiseVariable::Assign(const BlaiseVariable& var) {
     if (this == &var)
         return *this;
 
-    if (*type_ == *var.type_) {
-        value_ = var.value_;
-        return *this;
-    }
-
-    if (*type_ == typeid(double)) {
-        if (*var.type_ == typeid(int)) {
-            value_ = ANY_RECAST(int, double, var.value_);
-            return *this;
-        }
-    } else if (*type_ == typeid(int)) {
-        if (*var.type_ == typeid(double)) {
-            value_ = ANY_RECAST(double, int, var.value_);
-            return *this;
-        }
-    }
+    value_ = var.value_;
+    return *this;
 
     throw std::invalid_argument("Invalid assignment for variable " + name_);
 }
@@ -265,7 +233,7 @@ BlaiseVariable BlaiseVariable::operator==(const BlaiseVariable& var) const {
 
 BlaiseVariable BlaiseVariable::operator!=(const BlaiseVariable& var) const {
     bool result = !std::any_cast<bool>((*this == var).value_);
-    return BlaiseVariable(typeid(bool), result);
+    return BlaiseVariable(result);
 }
 
 BlaiseVariable BlaiseVariable::operator<(const BlaiseVariable& var) const {
@@ -310,27 +278,27 @@ BlaiseVariable BlaiseVariable::operator>=(const BlaiseVariable& var) const {
 }
 
 BlaiseVariable BlaiseVariable::operator+() const {
-    if (*type_ == typeid(double)) {
+    if (value_.type() == typeid(double)) {
         double result = std::any_cast<double>(value_);
-        return BlaiseVariable(typeid(double), +result);
-    } else if (*type_ == typeid(int)) {
+        return BlaiseVariable(+result);
+    } else if (value_.type() == typeid(int)) {
         int result = std::any_cast<int>(value_);
-        return BlaiseVariable(typeid(int), +result);
+        return BlaiseVariable(+result);
     }
 
-    throw std::invalid_argument("Invalid operation for type " + std::string(type_->name()));
+    throw std::invalid_argument("Invalid operation for type " + std::string(value_.type().name()));
 }
 
 BlaiseVariable BlaiseVariable::operator-() const {
-    if (*type_ == typeid(double)) {
+    if (value_.type() == typeid(double)) {
         double result = std::any_cast<double>(value_);
-        return BlaiseVariable(typeid(double), -result);
-    } else if (*type_ == typeid(int)) {
+        return BlaiseVariable(-result);
+    } else if (value_.type() == typeid(int)) {
         int result = std::any_cast<int>(value_);
-        return BlaiseVariable(typeid(int), -result);
+        return BlaiseVariable(-result);
     }
 
-    throw std::invalid_argument("Invalid operation for type " + std::string(type_->name()));
+    throw std::invalid_argument("Invalid operation for type " + std::string(value_.type().name()));
 }
 
 bool BlaiseFunction::operator==(const std::string& str) const {
@@ -339,10 +307,6 @@ bool BlaiseFunction::operator==(const std::string& str) const {
 
 const std::string& BlaiseFunction::Name() const {
     return name_;
-}
-
-const std::type_info& BlaiseFunction::RetType() const {
-    return *ret_type_;
 }
 
 const ArgsList& BlaiseFunction::Args() const {

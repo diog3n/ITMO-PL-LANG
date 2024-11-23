@@ -3,7 +3,6 @@ grammar Blaise;
 program : (stmt)* EOF;
 
 stmt    : function_def
-        | var_def ';'
         | function_call ';'
         | block
         | expr ';'
@@ -14,15 +13,15 @@ stmt    : function_def
         | writeln_stmt ';'
         ;
 
-function_def    : FUNCTION IDENTIFIER '(' (param_list)? ')' RETURNS IDENTIFIER ';'          # FunctionDeclaration
-                | FUNCTION IDENTIFIER '(' (param_list)? ')' RETURNS IDENTIFIER stmt         # FunctionDefinition
+function_def    : FUNCTION IDENTIFIER '(' (param_list)? ')' ';'                             # FunctionDeclaration
+                | FUNCTION IDENTIFIER '(' (param_list)? ')' stmt                            # FunctionDefinition
                 ;
 
 function_call   : IDENTIFIER '(' (arg_list)? ')'                                            # FunctionCall
                 ;
 
-param_list      : IDENTIFIER IDENTIFIER ',' param_list                                      # ParamListComma
-                | IDENTIFIER IDENTIFIER                                                     # ParamListEnd
+param_list      : IDENTIFIER ',' param_list                                                 # ParamListComma
+                | IDENTIFIER                                                                # ParamListEnd
                 ;
 
 arg_list        : (IDENTIFIER | expr) ',' arg_list                                          # ArgListComma
@@ -30,12 +29,6 @@ arg_list        : (IDENTIFIER | expr) ',' arg_list                              
                 ;
 
 block           : 'begin' (stmt)* 'end'                                                     # CodeBlock
-                ;
-
-var_def         : IDENTIFIER IDENTIFIER (initialization)?                                   # VariableDefinition
-                ;
-
-initialization  : ASSIGN expr                                                               # VariableInitialization
                 ;
 
 return_stmt     : 'return' (IDENTIFIER | expr)                                              # ReturnStmt

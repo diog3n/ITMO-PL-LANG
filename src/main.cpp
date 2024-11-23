@@ -48,11 +48,11 @@ int main(int argc, const char** argv) {
     // Associate a visitor with the Suite context
     InterpreterVisitor visitor;
 
-    try {
+    // try {
         std::any result = visitor.visitProgram(parse_result);
-    } catch (std::invalid_argument& e) {
-        std::cout << e.what() << std::endl;
-    }
+    // } catch (std::invalid_argument& e) {
+        // std::cout << e.what() << std::endl;
+    // }
 
     return 0;
 }

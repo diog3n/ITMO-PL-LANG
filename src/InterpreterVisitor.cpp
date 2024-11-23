@@ -12,8 +12,8 @@
 #include "Util.h"
 
 InterpreterVisitor::InterpreterVisitor() {
-    block_stack.emplace_back();
-    gl_block = &block_stack.back();
+    stack_frames.emplace_back();
+    gl_block = &stack_frames.back();
 }
 
 std::string InterpreterVisitor::StringToUpper(std::string str) {
@@ -26,7 +26,7 @@ InterpreterVisitor::FindVarAndBlock(const std::string& str) {
     BlaiseBlock *block = nullptr;
     BlaiseVariable *id = nullptr;
 
-    for (auto riter = block_stack.rbegin(); riter != block_stack.rend(); riter++) {
+    for (auto riter = stack_frames.rbegin(); riter != stack_frames.rend(); riter++) {
         for (auto id_riter = riter->variables.rbegin(); id_riter != riter->variables.rend(); id_riter++) {
             if (id_riter->Name() == str) {
                 id = &(*id_riter);
@@ -36,8 +36,7 @@ InterpreterVisitor::FindVarAndBlock(const std::string& str) {
             }
         }
     }
-
-    throw std::invalid_argument("Variable " + str + " has not been defined!");
+    return std::make_pair(nullptr, nullptr);
 }
 
 std::pair<BlaiseFunction *, BlaiseBlock *>
@@ -45,7 +44,7 @@ InterpreterVisitor::FindFunctionAndBlock(const std::string& str) {
     BlaiseBlock *block = nullptr;
     BlaiseFunction *func = nullptr;
 
-    for (auto riter = block_stack.rbegin(); riter != block_stack.rend(); riter++) {
+    for (auto riter = stack_frames.rbegin(); riter != stack_frames.rend(); riter++) {
         for (auto id_riter = riter->functions.rbegin(); id_riter != riter->functions.rend(); id_riter++) {
             if (id_riter->Name() == str) {
                 func = &(*id_riter);
@@ -61,28 +60,28 @@ InterpreterVisitor::FindFunctionAndBlock(const std::string& str) {
 
 void InterpreterVisitor::DebugPrintStack() const {
     DEBUG_OUT(0) << "==== Variables ====" << std::endl;
-    for (auto riter = block_stack.rbegin(); riter != block_stack.rend(); riter++) {
+    for (auto riter = stack_frames.rbegin(); riter != stack_frames.rend(); riter++) {
         for (auto id_riter = riter->variables.rbegin(); id_riter != riter->variables.rend(); id_riter++) {
                 DEBUG_OUT(0) << id_riter->Name() << ", type: " << id_riter->Type().name() << ", value = " << id_riter->ToString() << std::endl;
         }
     }
 
     DEBUG_OUT(0) << "==== Functions ====" << std::endl;
-    for (auto riter = block_stack.rbegin(); riter != block_stack.rend(); riter++) {
+    for (auto riter = stack_frames.rbegin(); riter != stack_frames.rend(); riter++) {
         for (auto id_riter = riter->functions.rbegin(); id_riter != riter->functions.rend(); id_riter++) {
-                DEBUG_OUT(0) << id_riter->Name() << ", type: " << id_riter->RetType().name() << std::endl;
+                DEBUG_OUT(0) << id_riter->Name() << std::endl;
         }
     }
 }
 
-BlaiseFunction& InterpreterVisitor::AddFunction(const std::string& name, const std::type_info& type,
+BlaiseFunction& InterpreterVisitor::AddFunction(const std::string& name,
                                                 BlaiseParser::Param_listContext *paramlist) {
     ArgsList args;
 
     if (paramlist)
         args = std::move(std::any_cast<ArgsList>(visit(paramlist)));
 
-    BlaiseFunction& func = block_stack.back().functions.emplace_back(name, type, args);
+    BlaiseFunction& func = stack_frames.back().functions.emplace_back(name, args);
 
     return func;
 }
@@ -122,7 +121,7 @@ std::any InterpreterVisitor::visitProgram(BlaiseParser::ProgramContext *context)
         }
 
         for (const auto& func : gl_block->functions) {
-            std::cout << func.Name() << ": " << func.RetType().name() << std::endl;
+            std::cout << func.Name() << std::endl;
             for (const auto& arg : func.Args()) {
                 std::cout << arg.Name() << ": " << arg.Type().name() << std::endl;
             }
@@ -139,25 +138,23 @@ std::any InterpreterVisitor::visitStmt(BlaiseParser::StmtContext *context) {
 
 std::any InterpreterVisitor::visitFunctionDeclaration(BlaiseParser::FunctionDeclarationContext *context) {
 
-    const std::string& id = context->IDENTIFIER(0)->toString();
-    const std::type_info& type = StringToTypeId(context->IDENTIFIER(1)->toString());
+    const std::string& id = context->IDENTIFIER()->toString();
 
-    AddFunction(id, type, context->param_list());
+    AddFunction(id, context->param_list());
     return 0;
 }
 
 std::any InterpreterVisitor::visitFunctionDefinition(BlaiseParser::FunctionDefinitionContext *context) {
-    const std::string& id = context->IDENTIFIER(0)->toString();
-    const std::type_info& type = StringToTypeId(context->IDENTIFIER(1)->toString());
+    const std::string& id = context->IDENTIFIER()->toString();
 
-    auto iter = std::find(block_stack.back().functions.begin(), block_stack.back().functions.end(), id);
+    auto iter = std::find(stack_frames.back().functions.begin(), stack_frames.back().functions.end(), id);
 
-    if (iter == block_stack.back().functions.end()) {
-        AddFunction(id, type, context->param_list());
+    if (iter == stack_frames.back().functions.end()) {
+        AddFunction(id, context->param_list());
     }
 
-    if (!block_stack.back().functions.back().IsDefined()) {
-        block_stack.back().functions.back().SetBlock(context->stmt());
+    if (!stack_frames.back().functions.back().IsDefined()) {
+        stack_frames.back().functions.back().SetBlock(context->stmt());
     } else {
         throw std::invalid_argument("Function redefinition is not allowed. Function " + id + " is already defined.");
     }
@@ -181,30 +178,28 @@ std::any InterpreterVisitor::visitFunctionCall(BlaiseParser::FunctionCallContext
     auto aiter = args.begin();
     auto fiter = funcptr->Args().begin();
 
-    block_stack.emplace_back();
+    stack_frames.emplace_back();
 
     for ( ;fiter != funcptr->Args().end(); fiter++, aiter++) {
-        auto& var = block_stack.back().variables.emplace_back(fiter->Name(), fiter->Type());
+        auto& var = stack_frames.back().variables.emplace_back(fiter->Name());
         var.Assign(*aiter);
     }
 
     try {
-
         visit(funcptr->Block());
 
-    } catch (BlaiseVariable var) {
+    } catch (const BlaiseVariable& var) {
 
-        block_stack.pop_back();
-        return var;
+        stack_frames.pop_back();
+        return BlaiseVariable(var); // explicit copying to make my LSP shut up
     }
 
-    block_stack.pop_back();
-    return BlaiseVariable(typeid(void), nullptr);
+    stack_frames.pop_back();
+    return BlaiseVariable();
 }
 
 std::any InterpreterVisitor::visitParamListComma(BlaiseParser::ParamListCommaContext *context) {
-    const std::type_info& type = StringToTypeId(context->IDENTIFIER(0)->toString());
-    const std::string& id = context->IDENTIFIER(1)->toString();
+    const std::string& id = context->IDENTIFIER()->toString();
     auto args = std::any_cast<ArgsList>(visit(context->param_list()));
     auto iter = std::find(args.begin(), args.end(), id);
 
@@ -212,17 +207,16 @@ std::any InterpreterVisitor::visitParamListComma(BlaiseParser::ParamListCommaCon
         throw std::invalid_argument("Identifier " + id + " already is in the list.");
     }
 
-    args.emplace_front(id, type);
+    args.emplace_front(id);
 
     return args;
 }
 
 std::any InterpreterVisitor::visitParamListEnd(BlaiseParser::ParamListEndContext *context) {
-    const std::string& id = context->IDENTIFIER(1)->toString();
-    const std::type_info& type = StringToTypeId(context->IDENTIFIER(0)->toString());
+    const std::string& id = context->IDENTIFIER()->toString();
 
     ArgsList args;
-    args.emplace_front(id, type);
+    args.emplace_front(id);
 
     return args;
 }
@@ -261,44 +255,29 @@ std::any InterpreterVisitor::visitArgListEnd(BlaiseParser::ArgListEndContext *co
 }
 
 std::any InterpreterVisitor::visitCodeBlock(BlaiseParser::CodeBlockContext *context) {
-    block_stack.emplace_back();
+    stack_frames.emplace_back();
     try {
         std::any value = visitChildren(context);
-        block_stack.pop_back();
+        stack_frames.pop_back();
         return value;
     } catch (const BlaiseVariable& ret) {
-
-        block_stack.pop_back();
-        throw ret;
+        stack_frames.pop_back();
+        throw;
     }
-}
-
-std::any InterpreterVisitor::visitVariableDefinition(BlaiseParser::VariableDefinitionContext *context) {
-    const std::string type_id = context->IDENTIFIER(0)->toString();
-    const std::string var_id  = context->IDENTIFIER(1)->toString();
-    const std::type_info& var_type = StringToTypeId(type_id);
-
-    BlaiseBlock *blockptr = &block_stack.back();
-    BlaiseVariable& var = blockptr->variables.emplace_back(var_id, var_type);
-
-    if (context->initialization()) {
-        const BlaiseVariable value = std::any_cast<BlaiseVariable>(visit(context->initialization()));
-        var.Assign(value);
-    }
-
-    return var;
-}
-
-std::any InterpreterVisitor::visitVariableInitialization(BlaiseParser::VariableInitializationContext *context) {
-    return visit(context->expr());
 }
 
 std::any InterpreterVisitor::visitAssignStmt(BlaiseParser::AssignStmtContext *context) {
-    auto [varptr, blockptr] = FindVarAndBlock(context->IDENTIFIER()->toString());
+    const std::string& id = context->IDENTIFIER()->toString();
+    auto [varptr, block] = FindVarAndBlock(id);
     BlaiseVariable value = std::any_cast<BlaiseVariable>(visit(context->expr()));
 
-    varptr->Assign(value);
+    // If there is no such variable
+    if (varptr == nullptr) {
+        const BlaiseVariable& var = stack_frames.back().variables.emplace_back(id, value.Value());
+        return var;
+    }
 
+    varptr->Assign(value);
     return *varptr;
 }
 
@@ -324,17 +303,17 @@ std::any InterpreterVisitor::visitIfStmtBlock(BlaiseParser::IfStmtBlockContext *
         throw std::invalid_argument("If statement expression must be boolean!");
 
     if (condition) {
-        block_stack.emplace_back();
+        stack_frames.emplace_back();
 
         // We have to be ready to the fact that the stmt can
         // be a return statement.
         try {
             std::any value = visit(context->stmt());
-            block_stack.pop_back();
+            stack_frames.pop_back();
             return value;
         } catch (const BlaiseVariable& ret) {
             // cleanup the stack
-            block_stack.pop_back();
+            stack_frames.pop_back();
             // propagate upwards
             throw;
         }
@@ -348,15 +327,15 @@ std::any InterpreterVisitor::visitIfStmtBlock(BlaiseParser::IfStmtBlockContext *
 }
 
 std::any InterpreterVisitor::visitElseStmtBlock(BlaiseParser::ElseStmtBlockContext *context) {
-    block_stack.emplace_back();
+    stack_frames.emplace_back();
 
     // Again, be ready for return statement
     try {
         std::any value = visitChildren(context);
-        block_stack.pop_back();
+        stack_frames.pop_back();
         return value;
     } catch (const BlaiseVariable& var) {
-        block_stack.pop_back();
+        stack_frames.pop_back();
         throw;
     }
 }
@@ -370,7 +349,7 @@ std::any InterpreterVisitor::visitLoopStmt(BlaiseParser::LoopStmtContext *contex
 
 
     while (true) {
-        block_stack.emplace_back();
+        stack_frames.emplace_back();
         BlaiseVariable var = std::move(std::any_cast<BlaiseVariable>(visit(context->expr())));
 
         if (var.Is<bool>())
@@ -387,11 +366,11 @@ std::any InterpreterVisitor::visitLoopStmt(BlaiseParser::LoopStmtContext *contex
 
         } catch (const BlaiseVariable& ret) {
 
-            block_stack.pop_back();
+            stack_frames.pop_back();
             throw;
         }
 
-        block_stack.pop_back();
+        stack_frames.pop_back();
     }
 
 
@@ -485,25 +464,23 @@ std::any InterpreterVisitor::visitOperandId(BlaiseParser::OperandIdContext *cont
 
 std::any InterpreterVisitor::visitOperandInt(BlaiseParser::OperandIntContext *context) {
     int value = std::stoi(context->INT()->toString());
-    return BlaiseVariable(typeid(int), value);
+    return BlaiseVariable(value);
 }
 
 std::any InterpreterVisitor::visitOperandDouble(BlaiseParser::OperandDoubleContext *context) {
     double value = std::stod(context->DOUBLE()->toString());
-    return BlaiseVariable(typeid(double), value);
+    return BlaiseVariable(value);
 }
 
 std::any InterpreterVisitor::visitOperandChar(BlaiseParser::OperandCharContext *context) {
     std::string str = context->CHAR()->toString();
     char value = str.at(1);
-    return BlaiseVariable(typeid(char), value);
+    return BlaiseVariable(value);
 }
 
 std::any InterpreterVisitor::visitOperandString(BlaiseParser::OperandStringContext *context) {
     std::string full_str = context->STRING()->toString();
-    return BlaiseVariable(typeid(std::string),
-                          std::string(full_str.begin() + 1,
-                                      full_str.end() - 1));
+    return BlaiseVariable(std::string(), std::string(full_str.begin() + 1, full_str.end() - 1));
 }
 
 std::any InterpreterVisitor::visitOperandFunctionCall(BlaiseParser::OperandFunctionCallContext *context) {
@@ -517,8 +494,8 @@ std::any InterpreterVisitor::visitOperandExpr(BlaiseParser::OperandExprContext *
 
 std::any InterpreterVisitor::visitOperandBoolean(BlaiseParser::OperandBooleanContext *context) {
     std::string str = context->BOOLEAN()->toString();
-    if (str == "true") return BlaiseVariable(typeid(bool), true);
-    else if (str == "false") return BlaiseVariable(typeid(bool), false);
+    if (str == "true") return BlaiseVariable(true);
+    else if (str == "false") return BlaiseVariable(false);
 
     throw std::invalid_argument(str + " is not a valid boolean value.");
 }

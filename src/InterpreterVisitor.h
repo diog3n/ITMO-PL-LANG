@@ -12,7 +12,7 @@ class InterpreterVisitor : public BlaiseBaseVisitor {
 public:
     BlaiseBlock *gl_block;              // global block
 
-    std::deque<BlaiseBlock> block_stack;
+    std::deque<BlaiseBlock> stack_frames;
 
 private:
     static const std::type_info& StringToTypeId(const std::string& str);
@@ -23,7 +23,7 @@ private:
 
     std::pair<BlaiseFunction *, BlaiseBlock *> FindFunctionAndBlock(const std::string& id);
 
-    BlaiseFunction& AddFunction(const std::string& name, const std::type_info& type,
+    BlaiseFunction& AddFunction(const std::string& name,
                                 BlaiseParser::Param_listContext *paramlist);
 
     void DebugPrintStack() const;
@@ -50,10 +50,6 @@ public:
     virtual std::any visitArgListEnd(BlaiseParser::ArgListEndContext *context) override;
 
     virtual std::any visitCodeBlock(BlaiseParser::CodeBlockContext *context) override;
-
-    virtual std::any visitVariableDefinition(BlaiseParser::VariableDefinitionContext *context) override;
-
-    virtual std::any visitVariableInitialization(BlaiseParser::VariableInitializationContext *context) override;
 
     virtual std::any visitAssignStmt(BlaiseParser::AssignStmtContext *ctx) override;
 
