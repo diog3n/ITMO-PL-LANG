@@ -10,24 +10,27 @@
 
 class InterpreterVisitor : public BlaiseBaseVisitor {
 public:
+    BlaiseBlock *gl_block;              // global block
 
-    InterpreterVisitor();
-
-    BlaiseBlock *gl_block; // global block
     std::deque<BlaiseBlock> block_stack;
 
-private:  // ====================== METHODS ===========================
+private:
     static const std::type_info& StringToTypeId(const std::string& str);
-    static std::string StringToUpper(std::string str);
-    static bool IsNumber(const std::any& value);
 
-    static std::string AnyValueToString(const std::any& value);
-    std::pair<std::string *, BlaiseBlock *> FindIdAndBlock(const std::string& id);
+    static std::string StringToUpper(std::string str);
+
+    std::pair<BlaiseVariable *, BlaiseBlock *> FindVarAndBlock(const std::string& id);
+
+    std::pair<BlaiseFunction *, BlaiseBlock *> FindFunctionAndBlock(const std::string& id);
 
     BlaiseFunction& AddFunction(const std::string& name, const std::type_info& type,
                                 BlaiseParser::Param_listContext *paramlist);
 
+    void DebugPrintStack() const;
+
 public:
+    InterpreterVisitor();
+
     virtual std::any visitProgram(BlaiseParser::ProgramContext *context) override;
 
     virtual std::any visitStmt(BlaiseParser::StmtContext *context) override;

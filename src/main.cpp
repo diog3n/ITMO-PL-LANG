@@ -2,39 +2,42 @@
 #include <iostream>
 
 #include <antlr4-runtime.h>
+#include <stdexcept>
 #include "antlr/BlaiseParser.h"
 #include "antlr/BlaiseLexer.h"
 
 #include "InterpreterVisitor.h"
 #include "BlaiseErrorListener.h"
 
-int main(int argc, const char** argv) {
+enum ARGV_POSITIONS {
+    IN_FILE = 1,
+};
 
-    // Create an input file stream
-    std::ifstream infile("src/antlr/inputfile.lang");
+int main(int argc, const char** argv) {
+    if (argc < 2) {
+        std::cout << "Usage: ./blaise [input_file.bls]" << std::endl;
+        return 1;
+    }
+
+    std::ifstream infile(argv[IN_FILE]);
 
     if (!infile.is_open())
         return -1;
 
-    // Create an ANTLR stream from the file stream
     antlr4::ANTLRInputStream input(infile);
 
     BlaiseLexer lexer(&input);
 
-    // Create a token stream from the lexer
     antlr4::CommonTokenStream tokens(&lexer);
 
     BlaiseErrorListener errlistener;
 
-    // Create a parser from the token stream
     BlaiseParser parser(&tokens);
 
     parser.removeErrorListeners();
     parser.addErrorListener(&errlistener);
 
     BlaiseParser::ProgramContext* parse_result = parser.program();
-
-    // std::cout << parse_result->toStringTree(true) << std::endl;
 
     if (parser.getNumberOfSyntaxErrors()) {
         std::cout << "Parsing failed with " << parser.getNumberOfSyntaxErrors()
@@ -45,12 +48,11 @@ int main(int argc, const char** argv) {
     // Associate a visitor with the Suite context
     InterpreterVisitor visitor;
 
-    std::any result = visitor.visitProgram(parse_result);
-
-    std::cout << result.has_value() << std::endl;
-
-    // std::string str = std::any_cast<std::string>(visitor.visitProgram(parser.program()));
-    // std::cout << "Visitor output: " << str << std::endl;
+    try {
+        std::any result = visitor.visitProgram(parse_result);
+    } catch (std::invalid_argument& e) {
+        std::cout << e.what() << std::endl;
+    }
 
     return 0;
 }

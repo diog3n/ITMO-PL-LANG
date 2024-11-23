@@ -1,0 +1,67 @@
+int a = -2;
+int b = 3;
+double c = 4;
+
+function func1(int a, double b) returns double
+begin
+    a = 5;
+    b = 3;
+
+    return a / b;
+end
+
+function func2(int a, double b) returns nothing
+begin
+    writeln("a = " + a);
+    writeln("b = " + b);
+end
+
+function func3() returns nothing writeln("nothing");
+
+function func4() returns boolean return true;
+
+boolean boo = c == 4;
+
+writeln("boo = " + boo);
+writeln("a = " + a);
+if (c >= 4) then
+begin
+    writeln("inside of the if block!");
+    double d = c;
+
+    writeln("d = " + d);
+end
+else if (a < 0) then
+begin
+    writeln("inside of the else if block!");
+end
+else
+begin
+    writeln("inside of the else block!");
+end
+
+if (c < 2) then writeln("inside if expression!");
+else if (a < 0) then writeln("inside else if expression");
+else writeln("inside else expression!");
+
+int i = 0;
+
+loop if (i < 10) begin
+    writeln("i = " + i);
+    i = i + 1;
+end
+
+writeln("func1(a, b) = " + func1(a, b));
+func2(a, b);
+
+writeln(a);
+writeln(b);
+writeln(c);
+
+writeln("(2 + c * 3) / 10 = " + (2 + c * 3) / 10);
+
+writeln("Hello world!");
+
+func3();
+
+writeln("func4() = " + func4());
