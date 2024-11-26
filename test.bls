@@ -1,6 +1,9 @@
+c = 4.0;
 a = -2;
 b = 3;
-c = 4;
+boo = c == 4;
+
+d = (a + b) * c / 10;
 
 function func1(a, b)
 begin
@@ -20,7 +23,8 @@ function func3() writeln("nothing");
 
 function func4() return true;
 
-boo = c == 4;
+
+if (boo == (c + d * a)) then writeln("yet again");
 
 writeln("boo = " + boo);
 writeln("a = " + a);
@@ -34,6 +38,10 @@ end
 else if (a < 0) then
 begin
     writeln("inside of the else if block!");
+end
+else if ((a + b) > 2) then
+begin
+    writeln("oh no");
 end
 else
 begin
@@ -51,7 +59,7 @@ loop if (i < 10) begin
     i = i + 1;
 end
 
-writeln("func1(a, b) = " + func1(a, b));
+writeln("func1(a, b) = " + func1(a + c + d, b));
 func2(a, b);
 
 writeln(a);

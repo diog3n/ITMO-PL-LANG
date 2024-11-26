@@ -3,6 +3,7 @@
 
 #include <antlr4-runtime.h>
 #include <stdexcept>
+#include "TacCompilerVisitor.h"
 #include "antlr/BlaiseParser.h"
 #include "antlr/BlaiseLexer.h"
 
@@ -46,13 +47,16 @@ int main(int argc, const char** argv) {
     }
 
     // Associate a visitor with the Suite context
-    InterpreterVisitor visitor;
+    // InterpreterVisitor visitor;
+    TacCompilerVisitor visitor;
 
     // try {
         std::any result = visitor.visitProgram(parse_result);
     // } catch (std::invalid_argument& e) {
         // std::cout << e.what() << std::endl;
     // }
+
+    std::cout << std::any_cast<std::string>(result) << std::endl;
 
     return 0;
 }
