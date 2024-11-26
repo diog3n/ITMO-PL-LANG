@@ -27,8 +27,6 @@ public:
 
     virtual std::any visitStmt(BlaiseParser::StmtContext *context) override;
 
-    virtual std::any visitFunctionDeclaration(BlaiseParser::FunctionDeclarationContext *context) override;
-
     virtual std::any visitFunctionDefinition(BlaiseParser::FunctionDefinitionContext *context) override;
 
     virtual std::any visitFunctionCall(BlaiseParser::FunctionCallContext *context) override;
@@ -50,8 +48,6 @@ public:
     virtual std::any visitIfStmtBlock(BlaiseParser::IfStmtBlockContext *context) override;
 
     virtual std::any visitElseStmtBlock(BlaiseParser::ElseStmtBlockContext *context) override;
-
-    virtual std::any visitElseIfStmt(BlaiseParser::ElseIfStmtContext *context) override;
 
     virtual std::any visitLoopStmt(BlaiseParser::LoopStmtContext *context) override;
 

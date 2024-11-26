@@ -3,16 +3,12 @@
 #include "Util.h"
 #include "antlr/BlaiseParser.h"
 #include <any>
-#include <atomic>
 #include <clocale>
-#include <cstdint>
-#include <iostream>
-#include <stdexcept>
 #include <string>
 #include <utility>
 
 #define NEWLINE_IF(__condition) \
-    ((__condition) ? ";\n" : "")
+    ((__condition) ? "\n" : "")
 
 using TranslationData = std::pair<std::string, std::string>;
 
@@ -66,20 +62,11 @@ std::any TacCompilerVisitor::visitStmt(BlaiseParser::StmtContext *context) {
     return TranslationData(data.first, data.second);
 }
 
-std::any TacCompilerVisitor::visitFunctionDeclaration(BlaiseParser::FunctionDeclarationContext *context) {
-    DEBUG_BEGIN(BLAISE_BEGIN_COUT);
-    return TranslationData("", context->FUNCTION()->toString() + ' '
-                            + context->IDENTIFIER()->toString()
-                            + '('
-                            + std::any_cast<std::string>(visit(context->param_list()))
-                            + ')' );
-}
-
 std::any TacCompilerVisitor::visitFunctionDefinition(BlaiseParser::FunctionDefinitionContext *context) {
     DEBUG_BEGIN(BLAISE_BEGIN_COUT);
     TranslationData stmt_data = std::any_cast<TranslationData>(visit(context->stmt()));
 
-    return TranslationData("", context->FUNCTION()->toString() + '('
+    return TranslationData("", context->FUNCTION()->toString() + " " + context->IDENTIFIER()->toString() + '('
            + (context->param_list() ? std::any_cast<std::string>(visit(context->param_list())) : "")
            + ')'
            + stmt_data.first + stmt_data.second);
@@ -164,9 +151,7 @@ std::any TacCompilerVisitor::visitReturnStmt(BlaiseParser::ReturnStmtContext *co
     std::string dependencies = expr_data.first + NEWLINE_IF(!insertions.empty() && !expr_data.first.empty())
                              + insertions;
 
-    return TranslationData(dependencies, "return " + (context->IDENTIFIER()
-                ? context->IDENTIFIER()->toString()
-                : expr_data.second));
+    return TranslationData(dependencies, "return " + expr_data.second);
 }
 
 std::any TacCompilerVisitor::visitWritelnStmt(BlaiseParser::WritelnStmtContext *context) {
@@ -210,11 +195,6 @@ std::any TacCompilerVisitor::visitElseStmtBlock(BlaiseParser::ElseStmtBlockConte
     TranslationData data = std::any_cast<TranslationData>(visit(context->stmt()));
 
     return TranslationData(data.first, "else " + data.second);
-}
-
-std::any TacCompilerVisitor::visitElseIfStmt(BlaiseParser::ElseIfStmtContext *context) {
-    DEBUG_BEGIN(BLAISE_BEGIN_COUT);
-    return TranslationData();
 }
 
 std::any TacCompilerVisitor::visitLoopStmt(BlaiseParser::LoopStmtContext *context) {

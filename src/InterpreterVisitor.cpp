@@ -136,14 +136,6 @@ std::any InterpreterVisitor::visitStmt(BlaiseParser::StmtContext *context) {
     return visitChildren(context);
 }
 
-std::any InterpreterVisitor::visitFunctionDeclaration(BlaiseParser::FunctionDeclarationContext *context) {
-
-    const std::string& id = context->IDENTIFIER()->toString();
-
-    AddFunction(id, context->param_list());
-    return 0;
-}
-
 std::any InterpreterVisitor::visitFunctionDefinition(BlaiseParser::FunctionDefinitionContext *context) {
     const std::string& id = context->IDENTIFIER()->toString();
 
@@ -338,10 +330,6 @@ std::any InterpreterVisitor::visitElseStmtBlock(BlaiseParser::ElseStmtBlockConte
         stack_frames.pop_back();
         throw;
     }
-}
-
-std::any InterpreterVisitor::visitElseIfStmt(BlaiseParser::ElseIfStmtContext *context) {
-    return visitChildren(context);
 }
 
 std::any InterpreterVisitor::visitLoopStmt(BlaiseParser::LoopStmtContext *context) {

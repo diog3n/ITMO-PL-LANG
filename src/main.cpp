@@ -3,6 +3,8 @@
 
 #include <antlr4-runtime.h>
 #include <stdexcept>
+#include "ANTLRInputStream.h"
+#include "CommonTokenStream.h"
 #include "TacCompilerVisitor.h"
 #include "antlr/BlaiseParser.h"
 #include "antlr/BlaiseLexer.h"
@@ -11,15 +13,15 @@
 #include "BlaiseErrorListener.h"
 
 enum ARGV_POSITIONS {
-    IN_FILE = 1,
+    IN_FILE = 2,
+    COMMAND = 1
 };
 
 int main(int argc, const char** argv) {
-    if (argc < 2) {
-        std::cout << "Usage: ./blaise [input_file.bls]" << std::endl;
+    if (argc < 3) {
+        std::cout << "Usage: ./blaise [command] [input_file.bls]" << std::endl;
         return 1;
     }
-
     std::ifstream infile(argv[IN_FILE]);
 
     if (!infile.is_open())
@@ -46,17 +48,17 @@ int main(int argc, const char** argv) {
         return 1;
     }
 
-    // Associate a visitor with the Suite context
-    // InterpreterVisitor visitor;
-    TacCompilerVisitor visitor;
-
-    // try {
-        std::any result = visitor.visitProgram(parse_result);
-    // } catch (std::invalid_argument& e) {
-        // std::cout << e.what() << std::endl;
-    // }
-
-    std::cout << std::any_cast<std::string>(result) << std::endl;
+    if (strcmp(argv[COMMAND], "comp") == 0) {
+        TacCompilerVisitor compiler;
+        std::any result = compiler.visitProgram(parse_result);
+        std::string compiled_text = std::any_cast<std::string>(result);
+        std::cout << compiled_text << std::endl;
+    } else if (strcmp(argv[COMMAND], "interp") == 0) {
+        InterpreterVisitor interpreter;
+        interpreter.visitProgram(parse_result);
+    } else {
+        std::cout << "Unknown command" << std::endl;
+    }
 
     return 0;
 }

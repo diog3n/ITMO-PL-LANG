@@ -3,18 +3,17 @@ grammar Blaise;
 program : (stmt)* EOF;
 
 stmt    : function_def
-        | function_call ';'
+        | function_call
         | block
-        | expr ';'
-        | return_stmt ';'
+        | expr
+        | return_stmt
         | if_stmt
         | loop_stmt
-        | assignment ';'
-        | writeln_stmt ';'
+        | assignment
+        | writeln_stmt
         ;
 
-function_def    : FUNCTION IDENTIFIER '(' (param_list)? ')' ';'                             # FunctionDeclaration
-                | FUNCTION IDENTIFIER '(' (param_list)? ')' stmt                            # FunctionDefinition
+function_def    : FUNCTION IDENTIFIER '(' (param_list)? ')' stmt                            # FunctionDefinition
                 ;
 
 function_call   : IDENTIFIER '(' (arg_list)? ')'                                            # FunctionCall
@@ -31,7 +30,7 @@ arg_list        : (IDENTIFIER | expr) ',' arg_list                              
 block           : 'begin' (stmt)* 'end'                                                     # CodeBlock
                 ;
 
-return_stmt     : 'return' (IDENTIFIER | expr)                                              # ReturnStmt
+return_stmt     : 'return' (expr)                                                           # ReturnStmt
                 ;
 
 writeln_stmt    : 'writeln' '(' expr ')'                                                    # WritelnStmt
@@ -41,10 +40,9 @@ if_stmt         : 'if' '(' expr ')' 'then' stmt (else_stmt)?                    
                 ;
 
 else_stmt       : 'else' stmt                                                               # ElseStmtBlock
-                | 'else' if_stmt                                                            # ElseIfStmt
                 ;
 
-loop_stmt       : 'loop' 'if' '(' expr ')' (stmt | ';')                                     # LoopStmt
+loop_stmt       : 'loop' 'if' '(' expr ')' (stmt)?                                          # LoopStmt
                 ;
 
 assignment      : IDENTIFIER ASSIGN expr                                                    # AssignStmt
@@ -108,3 +106,4 @@ GREATER_OR_EQUAL    : '>=' ;
 SPACE               : [ \r\n\t]+ -> skip;
 LINE_COMMENT        : '//' ~[\n\r]* -> skip;
 BLOCK_COMMENT       : '/*' .*? '*/' -> skip;
+SEMICOLON           : ';' -> skip;

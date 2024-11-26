@@ -7,7 +7,7 @@ enum blaise_debug_level {
     BLAISE_DEBUG_ERRORS_ONLY = 1,
 };
 
-#define DEBUG   3
+#define DEBUG   0
 
 #define ON_DEBUG(__level) \
     if (DEBUG >= __level)

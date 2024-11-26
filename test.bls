@@ -24,7 +24,7 @@ function func3() writeln("nothing");
 function func4() return true;
 
 
-if (boo == (c + d * a)) then writeln("yet again");
+if (boo == true) then writeln("yet again");
 
 writeln("boo = " + boo);
 writeln("a = " + a);
